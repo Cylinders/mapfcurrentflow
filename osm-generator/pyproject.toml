@@ -1,0 +1,26 @@
+[project]
+name = "osm-generator"
+version = "0.1.0"
+description = "A MAPF problem generator based on real-life using OpenStreetMap."
+readme = "README.txt"
+authors = [
+    { name = "Marco Sitar", email = "marco+git@sitar.dev" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "affine>=2.4.0",
+    "networkx>=3.6.1",
+    "numpy>=2.5.1",
+    "osmnx>=2.1.1",
+    "pillow>=12.3.0",
+    "pyproj>=3.7.2",
+    "rasterio>=1.5.0",
+    "shapely>=2.0,<3",
+]
+
+[project.scripts]
+osm-generator = "osm_generator:main"
+
+[build-system]
+requires = ["uv_build>=0.11.31,<0.12.0"]
+build-backend = "uv_build"
