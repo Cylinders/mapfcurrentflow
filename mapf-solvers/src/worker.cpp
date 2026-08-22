@@ -16,7 +16,6 @@
 #include "mapf_common/scenario_writer.h"
 #include "mapf_common/solution_reader.h"
 #include "mapf_common/solution_writer.h"
-#include "protocol.h"
 
 namespace mapf::solvers {
     namespace {
@@ -141,14 +140,55 @@ namespace mapf::solvers {
         start();
     }
 
+    std::string Worker::name() const {
+        std::string result = executable_.filename().string();
+        if (!arguments_.empty()) {
+            result += "[" + arguments_.front() + "]";
+        }
+        return result;
+    }
 
-    SolverResult Worker::solve(const SolverRequest &request, int threadName) {
+    void Worker::log_process_status() {
+        if (pid_ == -1) {
+            return;
+        }
+
+        int status = 0;
+        pid_t result;
+        do {
+            result = waitpid(pid_, &status, WNOHANG);
+        } while (result == -1 && errno == EINTR);
+
+        const std::string worker_name = name();
+        if (result == 0) {
+            std::cerr << worker_name << ": process " << pid_ << " is still running; restarting it\n";
+            return;
+        }
+        if (result == -1) {
+            std::cerr << worker_name << ": failed to read process status: " << std::strerror(errno) << '\n';
+            return;
+        }
+
+        if (WIFEXITED(status)) {
+            std::cerr << worker_name << ": process " << pid_ << " exited with code " << WEXITSTATUS(status) << '\n';
+        } else if (WIFSIGNALED(status)) {
+            const int signal = WTERMSIG(status);
+            std::cerr << worker_name << ": process " << pid_ << " terminated by signal " << signal
+                      << " (" << strsignal(signal) << ")\n";
+        } else {
+            std::cerr << worker_name << ": process " << pid_ << " ended with status " << status << '\n';
+        }
+
+        pid_ = -1;
+    }
+
+
+    SolverResult Worker::solve(const SolverRequest &request) {
             if (pid_ == -1) {
                 start();
             }
 
-            // 1. Appended threadName to the directory name to prevent thread collisions
-            const auto dir = std::filesystem::temp_directory_path() / std::format("mapf-solve-{}-{}", getpid(), threadName);
+            const auto dir = std::filesystem::temp_directory_path() / std::format("mapf-solve-{}", pid_);
             std::filesystem::create_directories(dir);
 
             const auto map_path = dir / "request.map";
@@ -180,8 +220,7 @@ namespace mapf::solvers {
                     }
                 }
 
-                // 2. Added threadName to logging for easier debugging
-                std::cout << "worker [" << threadName << "]: wrote tmp input files to " << map_path.string() << std::endl;
+                std::cout << "worker: wrote tmp input files to " << map_path.string() << std::endl;
 
                 start = std::chrono::steady_clock::now();
 
@@ -195,11 +234,11 @@ namespace mapf::solvers {
                     }
                 );
 
-                std::cout << "worker [" << threadName << "]: sent request." << std::endl;
+                std::cout << "worker: sent request." << std::endl;
 
                 const auto [response_solution_path] = protocol::read_response(stdout_fd_);
 
-                std::cout << "worker [" << threadName << "]: got response in " << response_solution_path << std::endl;
+                std::cout << "worker: got response in " << response_solution_path << std::endl;
 
                 auto solution = reader::read_solution(response_solution_path);
 
@@ -207,13 +246,12 @@ namespace mapf::solvers {
                     .solution = solution,
                 };
             } catch (const std::exception &e) {
-                // TODO: catch memory alloc error?
                 auto end = std::chrono::steady_clock::now();
 
-                std::cerr << "worker [" << threadName << "] error: " << e.what() << '\n';
+                std::cerr << name() << ": protocol failure: " << e.what() << '\n';
+                log_process_status();
                 restart();
 
-                // TODO: save failed problem for reference.
                 auto time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
                 auto failed_solution = Solution(map_path, scenario_path, std::to_string(static_cast<int>(request.kind)), StandardStatus::Crash, time, {});
 

@@ -16,13 +16,21 @@ int main(int argc, char **argv) {
     }
 
     const auto timeout = std::chrono::seconds{std::stoll(argv[1])};
+    std::cerr << "bcp-worker: ready (timeout " << timeout.count() << "s)\n";
 
     while (true) {
         try {
             const auto [map_path, scenario_path, group_paths, time_limit] = mapf::solvers::protocol::read_run(STDIN_FILENO);
+            std::cerr << "bcp-worker: received request"
+                      << " map=" << map_path
+                      << " scenario=" << scenario_path
+                      << " groups=" << group_paths.size()
+                      << " timeout=" << time_limit << "s\n";
 
             const auto grid = mapf::reader::read_map(map_path);
             const auto agents = mapf::reader::read_scenario(scenario_path);
+            std::cerr << "bcp-worker: loaded " << grid.width << 'x' << grid.height
+                      << " map with " << agents.size() << " agents\n";
             std::vector<std::vector<mapf::Path> > group_solutions;
             group_solutions.reserve(group_paths.size());
 
@@ -40,9 +48,13 @@ int main(int argc, char **argv) {
                 group_solutions.push_back(std::move(paths));
             }
 
+            std::cerr << "bcp-worker: starting "
+                      << (group_paths.empty() ? "solve" : "merge") << '\n';
             auto solution = group_paths.empty()
                                 ? mapf_solvers::bcp::bcp_solve(time_limit, grid, agents)
                                 : mapf_mergers::bcp::bcp_merge(time_limit, grid, agents, group_solutions);
+            std::cerr << "bcp-worker: finished with status=" << solution.status
+                      << " time_ms=" << solution.time_ms << '\n';
 
             solution.map = map_path;
             solution.scenario = scenario_path;
@@ -52,6 +64,7 @@ int main(int argc, char **argv) {
             mapf::writer::write_solution(solution_path, solution);
 
             mapf::solvers::protocol::write_response(STDOUT_FILENO, {.solution_path = solution_path});
+            std::cerr << "bcp-worker: response sent solution=" << solution_path << '\n';
         } catch (const std::bad_alloc &) {
             std::cerr << "bcp-worker error: out of memory\n";
             return 2;

@@ -20,7 +20,7 @@ namespace mapf::solvers {
         ~Worker();
 
         [[nodiscard]]
-        SolverResult solve(const SolverRequest &request, int threadName);
+        SolverResult solve(const SolverRequest &request);
 
     private:
         void start();
@@ -28,6 +28,11 @@ namespace mapf::solvers {
         void stop();
 
         void restart();
+
+        void log_process_status();
+
+        [[nodiscard]]
+        std::string name() const;
 
         std::filesystem::path executable_;
         std::vector<std::string> arguments_;
