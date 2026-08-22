@@ -24,7 +24,7 @@ Author: Edward Lam <ed@ed-lam.com>
 #include "mapf_common/solution.h"
 
 // Write best solution to file
-mapf::Solution write_best_solution(
+void get_best_solution(
     SCIP* scip,   // SCIP
-    mapf::Solution& mapf_sol
+    mapf::Solution& solution
 );

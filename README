@@ -1,0 +1,10 @@
+The main repository for code related to our MAPF research.
+
+mapf-common/ contains common MAPF data structures and functions used throughout the repositories.
+mapf-solvers/ contains the traditional solvers used throughout our research as a library.
+mapf-benchmark/ contains the benchmarking framework used to generate data.
+mapf-dallas/ contains our novel meta-solver implementation.
+mapf-meta-solver/ contains a baseline meta-solver implementation.
+
+For certain projects to build, please install the onnxruntime into external/onnxruntime/. By default, this is where the build expects it.
+The latest release can be found here: https://github.com/microsoft/onnxruntime/releases/.

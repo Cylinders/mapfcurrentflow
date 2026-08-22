@@ -1,68 +1,19 @@
-cmake_minimum_required(VERSION 3.21)
-project(mapf-solvers VERSION 1.0)
+add_subdirectory("workers/cbsh-worker")
+add_subdirectory("workers/bcp-worker")
 
-# =======================================================
-# GLOBAL SETTINGS
-# =======================================================
-set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+# protocol
+add_library(mapf-solvers-protocol STATIC src/protocol.cpp)
 
-# Set C version
-set(CMAKE_C_STANDARD 11)
-set(CMAKE_C_STANDARD_REQUIRED 1)
+target_include_directories(mapf-solvers-protocol PUBLIC include)
 
-# Set C++ version
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED 1)
+target_link_libraries(mapf-solvers-protocol PUBLIC mapf::common)
 
-# Set release build default
-if (NOT CMAKE_BUILD_TYPE)
-    set(CMAKE_BUILD_TYPE Release)
-endif ()
+add_library(mapf::solvers::protocol ALIAS mapf-solvers-protocol)
 
-# bcp
-add_subdirectory(solvers/bcp-mapf)
+# solver api
+add_library(mapf-solvers STATIC src/solver.cpp src/worker.cpp)
 
-# cbsh2-rtc
-add_subdirectory(solvers/CBSH2-RTC)
+target_include_directories(mapf-solvers PUBLIC include)
+target_link_libraries(mapf-solvers PUBLIC mapf::common PRIVATE mapf-solvers-protocol)
 
-#
-## =======================================================
-## LIBRARY 3: reLOC (MDDSAT)
-## =======================================================
-#set(MDDSAT "solvers/MDDSAT")
-#file(GLOB MDDSAT_SOURCES "${MDDSAT}/src/*.cpp")
-#message(STATUS "MDDSAT Sources found: ${MDDSAT_SOURCES}")
-#add_library(MDDSAT_Library STATIC ${MDDSAT_SOURCES})
-
-# wrapper
-add_library(mapf-solvers STATIC
-        src/solvers.cpp
-)
-
-target_link_libraries(mapf-solvers PRIVATE
-        bcp-mapf
-        CBSH2_Library
-#        MDDSAT_Library
-)
-
-target_include_directories(mapf-solvers
-        PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}/src
-#        PRIVATE
-#        "${CMAKE_CURRENT_SOURCE_DIR}/solvers/MDDSAT/src"
-)
-
-option(MAPF_BUILD_APP "standalone app" OFF)
-
-if (MAPF_BUILD_APP)
-    add_executable(MyApp src/main.cpp)
-    target_link_libraries(MyApp PRIVATE
-            bcp-mapf
-            CBSH2_Library
-#            MDDSAT_Library
-    )
-#    target_include_directories(MyApp PRIVATE
-#            "${CMAKE_CURRENT_SOURCE_DIR}/solvers/MDDSAT/src"
-#    )
-endif()
-
+add_library(mapf::solvers ALIAS mapf-solvers)

@@ -12,6 +12,8 @@ struct AgentData
 {
     Node start;
     Node goal;
+
+    bool operator==(const AgentData&) const = default;
 };
 
 struct BcpInstance
@@ -38,4 +40,7 @@ struct BcpInstance
     BcpInstance& operator=(const BcpInstance&) = delete;
     BcpInstance& operator=(BcpInstance&&) = delete;
     ~BcpInstance() = default;
+
+    // added for mapf-dallas. not original.
+    BcpInstance(const String &name, const Map map, const Vector<AgentData> agents);
 };

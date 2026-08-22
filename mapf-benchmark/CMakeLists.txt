@@ -1,35 +1,34 @@
-cmake_minimum_required(VERSION 3.28)
-project(mapf-dataset)
-
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-set(CMAKE_CXX_STANDARD 20)
-set(ORT_DIR ${CMAKE_SOURCE_DIR}/external/onnxruntime)
-
-include_directories(${ORT_DIR}/include)
-link_directories(${ORT_DIR}/lib)
-
 find_package(OpenCV REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(Threads REQUIRED)
 
-add_executable(mapf-dataset
+add_executable(mapf-benchmark
         src/main.cpp
         src/manifest.cpp
-        src/mapfaster_encode.cpp
-        src/mapfaster_valuation.cpp
 )
 
-target_include_directories(mapf-dataset PRIVATE
-        ${CMAKE_SOURCE_DIR}/include
+## make sure the workers exist
+add_dependencies(mapf-benchmark
+        mapf-solver-worker-cbsh
+        mapf-solver-worker-bcp
 )
 
-target_link_libraries(mapf-dataset PRIVATE
+target_compile_definitions(mapf-benchmark PRIVATE
+        MAPF_CBSH_WORKER_PATH="$<TARGET_FILE:mapf-solver-worker-cbsh>"
+        MAPF_BCP_WORKER_PATH="$<TARGET_FILE:mapf-solver-worker-bcp>"
+)
+##
+
+target_include_directories(mapf-benchmark PRIVATE
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+)
+
+target_link_libraries(mapf-benchmark PRIVATE
         ${OpenCV_LIBS}
         onnxruntime
         nlohmann_json::nlohmann_json
+        mapf::common
+        mapf::solvers
 )
 
-add_subdirectory(../mapf_common ${CMAKE_CURRENT_BINARY_DIR}/mapf_common EXCLUDE_FROM_ALL)
-add_subdirectory(../mapf-solvers ${CMAKE_CURRENT_BINARY_DIR}/mapf-solvers EXCLUDE_FROM_ALL)
-
-target_link_libraries(mapf-dataset PRIVATE mapf-solvers mapf::common Threads::Threads)
+target_link_libraries(mapf-benchmark PRIVATE mapf::solvers mapf::common Threads::Threads)

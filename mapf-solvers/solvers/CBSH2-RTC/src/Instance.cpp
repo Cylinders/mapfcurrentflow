@@ -6,7 +6,26 @@
 
 int RANDOM_WALK_STEPS = 100000;
 
-Instance::Instance(const string& map_fname, const string& agent_fname, 
+Instance::Instance(const vector<bool> &map, const int rows, const int cols, const vector<std::pair<int, int>> &agents) {
+	num_of_rows = rows;
+	num_of_cols = cols;
+	map_size = num_of_rows * num_of_cols;
+
+	my_map = map;
+
+	num_of_agents = agents.size();
+	start_locations.resize(num_of_agents);
+	goal_locations.resize(num_of_agents);
+
+	for (auto i = 0; i < num_of_agents; i++) {
+		auto [start, goal] = agents[i];
+
+		start_locations[i] = start;
+        goal_locations[i] = goal;
+    }
+}
+
+Instance::Instance(const string& map_fname, const string& agent_fname,
 	int num_of_agents, const string& agent_indices, 
 	int num_of_rows, int num_of_cols, int num_of_obstacles, int warehouse_width):
 	map_fname(map_fname), agent_fname(agent_fname), num_of_agents(num_of_agents),  agent_indices(agent_indices)
@@ -14,7 +33,7 @@ Instance::Instance(const string& map_fname, const string& agent_fname,
 	bool succ = loadMap();
 	if (!succ)
 	{
-		if (num_of_rows > 0 && num_of_cols > 0 && num_of_obstacles >= 0 && 
+		if (num_of_rows > 0 && num_of_cols > 0 && num_of_obstacles >= 0 &&
 			num_of_obstacles < num_of_rows * num_of_cols) // generate random grid
 		{
 			generateConnectedRandomGrid(num_of_rows, num_of_cols, num_of_obstacles);
@@ -83,7 +102,7 @@ void Instance::generateRandomAgents(int warehouse_width)
 			int start = linearizeCoordinate(x, y);
 			if (my_map[start] || starts[start])
 				continue;
-				
+
 			// update start
 			start_locations[k] = start;
 			starts[start] = true;
@@ -150,7 +169,7 @@ bool Instance::addObstacle(int obstacle)
 	int goal = 1;
 	while (start < 3 && goal < 4)
 	{
-		if (x[start] < 0 || x[start] >= num_of_rows || y[start] < 0 || y[start] >= num_of_cols 
+		if (x[start] < 0 || x[start] >= num_of_rows || y[start] < 0 || y[start] >= num_of_cols
 			|| my_map[linearizeCoordinate(x[start], y[start])])
 			start++;
 		else if (goal <= start)
@@ -375,7 +394,7 @@ bool Instance::loadAgents()
 			for (int i = 0; i < num_of_agents; i++)
 				ids[i] = i;
 		}
-		char_separator<char> sep("\t");	
+		char_separator<char> sep("\t");
 		int count = 0;
 		int i = 0;
 		while(i < num_of_agents)

@@ -12,7 +12,11 @@ public:
 	int map_size = 0;
 
 	Instance() = default;
-	Instance(const string& map_fname, const string& agent_fname, 
+
+	// added for mapf-dallas. not original.
+	Instance(const vector<bool> &map, int rows, int cols, const vector<std::pair<int, int>> &agents);
+
+	Instance(const string& map_fname, const string& agent_fname,
 		int num_of_agents = 0, const string& agent_indices = "",
 		int num_of_rows = 0, int num_of_cols = 0, int num_of_obstacles = 0, int warehouse_width = 0);
 

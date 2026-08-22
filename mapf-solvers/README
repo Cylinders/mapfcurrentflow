@@ -1,0 +1,5 @@
+We make use of the following MAPF-solver implementations: CBS(H2), BCP, and LNS2.
+These implementations are found in `./solvers`.
+
+We provide worker binaries that can be executed to solve MAPF instances and are generally used throughout the repository.
+These implementations are found in './workers'.

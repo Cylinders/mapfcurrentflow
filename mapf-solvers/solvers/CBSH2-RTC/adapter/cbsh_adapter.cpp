@@ -3,25 +3,43 @@
 #include <string>
 #include "CBS.h"
 #include "CBSHeuristic.h"
+#include "mapf_common/agent.h"
+#include "mapf_common/grid.h"
 #include "mapf_common/solution.h"
 
 namespace {
-    mapf::Solution cbsh_solve_with_params(heuristics_type h,        // Options: "Zero", "CG", "DG", "WDG"
-                                rectangle_strategy r,    // Options: "None", "R", "RM", "GR", "Disjoint"
-                                corridor_strategy c,    // Options: "None", "C", "PC", "STC", "GC", "Disjoint"
-                                const std::string &mapFilePath, const std::string &scenFilePath, int n, const std::string &algo) {
-        // Other solver configurations
-        int agentNum = 0; // 0 reads all agents from the file
-        double cutoffTime = 300.0; // seconds
+    mapf::Solution cbsh_solve_with_params(
+        int timeout_s,
+        heuristics_type h, // Options: "Zero", "CG", "DG", "WDG"
+        rectangle_strategy r, // Options: "None", "R", "RM", "GR", "Disjoint"
+        corridor_strategy c, // Options: "None", "C", "PC", "STC", "GC", "Disjoint"
+        const mapf::Grid &grid,
+        const mapf::Agents &agents
+        // const std::string &mapFilePath, const std::string &scenFilePath, int n, const std::string &algo
+    ) {
         int screenOption = 0; // 0: none, 1: results, 2: all
         int seed = 0;
-        int restartRuns = 1;
         bool usingSipp = false;
 
+        // std::cerr << "cbsh-adapter: setting up agents" << std::endl;
+        std::vector<std::pair<int, int> > cbsh_agents;
+        cbsh_agents.reserve(agents.size());
+
+        for (auto [start, goal]: agents) {
+            // std::cerr << "cbsh-adapter: converting agent (" << start << ", " << goal << ")" << std::endl;
+            cbsh_agents.emplace_back(grid.index(start.row, start.col), grid.index(goal.row, goal.col));
+        }
+
+        // std::cerr << "cbsh-adapter: converted agents" << std::endl;
+
+        // std::cerr << "cbsh-adapter: starting instance" << std::endl;
         // --- Load the Instance ---
         // Assuming constructor matches: (map_file, agents_file, num_agents, agent_indices, rows, cols, obs, warehouse_width)
-        Instance instance(mapFilePath, scenFilePath, n, "", 0, 0, 0, 0);
+        // Instance instance(mapFilePath, scenFilePath, n, "", 0, 0, 0, 0);
+        Instance instance(grid.blocked, grid.height, grid.width, cbsh_agents);
         srand(seed);
+
+        // std::cerr << "cbsh-adapter: created instance" << std::endl;
 
         // --- Initialize the Solver ---
         CBS cbs(instance, usingSipp, screenOption);
@@ -37,37 +55,27 @@ namespace {
         // cbs.setNodeLimit(MAX_NODES); // Uncomment if MAX_NODES is defined in your headers
 
         // --- Run CBS ---
-        double runtime = 0;
-        int min_f_val = 0;
-        bool solved;
-        //for (int i = 0; i < restartRuns; i++) {
-        std::cout << " solving CBS H or CBS";
-        solved = cbs.solve(cutoffTime, min_f_val);
-        runtime += cbs.runtime;
-        // if (cbs.solution_found) break;
-        min_f_val = (int) cbs.min_f_val;
-        cbs.randomRoot = true;
-            //}
-        cbs.runtime = runtime;
-        mapf::Solution returnVal = cbs.returnSolution(solved);
-        cbs.clearSearchEngines();
-        return returnVal;
-    }
+        int min_f_val = 0; // TODO: we can probably hint this
+        cbs.solve(timeout_s, min_f_val);
+        // std::cerr << "cbs_adapted: solved is " << std::boolalpha << solved << std::endl;
 
+        min_f_val = (int) cbs.min_f_val;
+        mapf::Solution solution = cbs.get_solution();
+        cbs.clearSearchEngines();
+        return solution;
+    }
 }
 
 namespace mapf_solvers::cbsh {
-    mapf::Solution cbs_solve(const std::string &mapFilePath, const std::string &scenFilePath, const int n) {
-        return cbsh_solve_with_params(ZERO, NR, NC, mapFilePath, scenFilePath, n, "CBS");
+    mapf::Solution cbs_solve(const int timeout_s, const mapf::Grid &grid, const mapf::Agents &agents) {
+        auto solution = cbsh_solve_with_params(timeout_s, ZERO, NR, NC, grid, agents);
+        solution.algo = "cbs";
+        return solution;
     }
 
-    mapf::Solution cbsh_solve(const std::string &mapFilePath, const std::string &scenFilePath, const int n) {
-        return cbsh_solve_with_params(WDG, GR, GC, mapFilePath, scenFilePath, n, "CBSH");
+    mapf::Solution cbsh_solve(const int timeout_s, const mapf::Grid &grid, const mapf::Agents &agents) {
+        auto solution = cbsh_solve_with_params(timeout_s, WDG, GR, GC, grid, agents);
+        solution.algo = "cbsh";
+        return solution;
     }
-
-    /*
-    mapf::Solution cbsh_solveReturn(const std::string &mapFilePath, const std::string &scenFilePath, int n){
-
-    }
-    */
 }

@@ -18,109 +18,125 @@ Author: Edward Lam <ed@ed-lam.com>
 */
 
 #include "problem/output.h"
+
+#include <iostream>
+
 #include "problem/includes.h"
 #include "problem/problem.h"
 #include "problem/variable_data.h"
-#include <string> // Required for std::string
+#include <string>
 
 #include <fmt/core.h>
 #include <string>
 #include <vector>
 #include "mapf_common/solution.h"
+#include "scipoptsuite-9.2.0/soplex/src/soplex/external/fmt/format.h"
 
+namespace {
+    mapf::AgentSolution make_agent_solution(
+        SCIP_ProbData *probdata,
+        const Time path_length,
+        const Edge *path
+    ) {
+        debug_assert(probdata);
+        debug_assert(path);
 
-mapf::Solution write_best_solution(
-    SCIP* scip,
-    mapf::Solution& mapf_sol
-)
-{
+        mapf::AgentSolution result;
+        result.reserve(path_length);
+
+        const auto map = SCIPprobdataGetMap(probdata);
+
+        for (Time t = 0; t < path_length; ++t) {
+            const Node n = path[t].n;
+
+            const auto row = map.get_y(n);
+            const auto col = map.get_x(n);
+
+            result.push_back({
+                static_cast<int>(row),
+                static_cast<int>(col)
+            });
+        }
+
+        return result;
+    }
+}
+
+void get_best_solution(SCIP *scip, mapf::Solution &solution) {
     debug_assert(scip);
 
-    auto probdata = SCIPgetProbData(scip);
+    auto *probdata = SCIPgetProbData(scip);
+    debug_assert(probdata);
+
     const auto N = SCIPprobdataGetN(probdata);
+    const auto solving_time = SCIPgetSolvingTime(scip);
 
-    const auto& map = SCIPprobdataGetMap(probdata);
+    solution.algo = "bcp";
+    solution.status = to_string(mapf::StandardStatus::Infeasible);
+    solution.time_ms = static_cast<long>(solving_time * 1000.0);
+    solution.agent_solutions.assign(N, std::nullopt);
 
-    mapf_sol.agent_solutions.assign(N, std::nullopt);
-    mapf_sol.completed = false;
-    mapf_sol.time = SCIPgetSolvingTime(scip) * 1000.0;
+    SCIP_SOL *scip_sol = SCIPgetBestSol(scip);
+    if (!scip_sol) {
+        // check if timeout
+        SCIP_Real timelimit;
+        SCIPgetRealParam(scip, "limits/time", &timelimit);
 
-    const auto& dummy_vars = SCIPprobdataGetDummyVars(probdata);
-    const auto& agent_vars = SCIPprobdataGetAgentVars(probdata);
+        if (solving_time - timelimit >= 0) {
+            solution.status = to_string(mapf::StandardStatus::Timeout);
+        }
 
-    // Get best solution.
-    auto sol = SCIPgetBestSol(scip);
-    SCIP_Real obj = 0;
-
-    if (!sol)
-    {
-        mapf_sol.completed = false;
-        return mapf_sol;
+        return;
     }
 
-    obj = SCIPgetSolOrigObj(scip, sol);
-    if (obj >= ARTIFICIAL_VAR_COST)
-    {
-        mapf_sol.completed = false;
-        return mapf_sol;
+    const SCIP_Real obj = SCIPgetSolOrigObj(scip, scip_sol);
+    if (obj >= ARTIFICIAL_VAR_COST) {
+        return;
     }
 
-    for (Agent a = 0; a < N; ++a)
-    {
-        auto var = dummy_vars[a];
-        debug_assert(var);
-        debug_assert(!SCIPvarGetData(var));
+    const auto &dummy_vars = SCIPprobdataGetDummyVars(probdata);
+    const auto &agent_vars = SCIPprobdataGetAgentVars(probdata);
 
-        const auto var_val = SCIPgetSolVal(scip, sol, var);
+    for (Agent a = 0; a < N; ++a) {
+        SCIP_VAR *dummy_var = dummy_vars[a];
+
+        debug_assert(dummy_var);
+        debug_assert(!SCIPvarGetData(dummy_var));
+
+        if (SCIPisPositive(scip, SCIPgetSolVal(scip, scip_sol, dummy_var))) {
+            return;
+        }
     }
 
-    // Extract the actual paths
-    for (Agent a = 0; a < N; ++a)
-    {
-        bool found = false;
+    for (Agent a = 0; a < N; ++a) {
+        bool found_path = false;
 
-        for (const auto& [var, _] : agent_vars[a])
-        {
+        for (const auto &[var, _]: agent_vars[a]) {
             debug_assert(var);
 
-            const auto var_val = SCIPgetSolVal(scip, sol, var);
-
-            if (SCIPisPositive(scip, var_val))
-            {
-                auto vardata = SCIPvarGetData(var);
-                const auto path_length = SCIPvardataGetPathLength(vardata);
-                const auto path = SCIPvardataGetPath(vardata);
-
-                mapf::AgentSolution current_agent_path;
-                current_agent_path.reserve(path_length);
-
-                for (int t = 0; t < path_length; ++t)
-                {
-                    const auto e = path[t];
-                    auto [x, y] = map.get_xy(e.n);
-
-#ifdef REMOVE_PADDING
-                    --x;
-                    --y;
-#endif
-
-                    current_agent_path.push_back({x, y});
-                }
-
-                mapf_sol.agent_solutions[a] = std::move(current_agent_path);
-                found = true;
-
-                break;
+            const SCIP_Real val = SCIPgetSolVal(scip, scip_sol, var);
+            if (!SCIPisPositive(scip, val)) {
+                continue;
             }
+
+            auto *vardata = SCIPvarGetData(var);
+            debug_assert(vardata);
+
+            const Time path_length = SCIPvardataGetPathLength(vardata);
+            const Edge *path = SCIPvardataGetPath(vardata);
+
+            debug_assert(path);
+
+            solution.agent_solutions[a] = make_agent_solution(probdata, path_length, path);
+
+            found_path = true;
+            break;
         }
 
-        if (!found)
-        {
-            mapf_sol.completed = false;
-            return mapf_sol;
+        if (!found_path) {
+            return;
         }
     }
 
-    mapf_sol.completed = true;
-    return mapf_sol;
+    solution.status = to_string(mapf::StandardStatus::Solved);
 }

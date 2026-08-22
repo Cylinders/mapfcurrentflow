@@ -1,142 +1,94 @@
 #include "bcp_adapter.h"
-#include <iostream>
 
-#include "../bcp/problem/includes.h"
-#include "../bcp/problem/reader.h"
-#include "../bcp/problem/output.h"
+#include <iostream>
+#include <span>
+
+#include "problem/includes.h"
+#include "problem/output.h"
 
 #include "scip/scipshell.h"
 #include "scip/scipdefplugins.h"
 
 #include "cxxopts.hpp"
+#include "struct_scip.h"
+#include "struct_set.h"
 
+#include "mapf_common/agent.h"
+#include "mapf_common/grid.h"
 #include "mapf_common/solution.h"
+
+#include "problem/bcp_instance.h"
+#include "problem/problem.h"
+
+#include "heuristics/seeded_solution.h"
+
 namespace {
-    SCIP_RETCODE bcp_start_solver(
-        int argc,
-        char **argv,
-        mapf::Solution &outputVal
+    struct AgentDataHash {
+        std::size_t operator()(const AgentData &agent) const {
+            std::size_t h1 = std::hash<Node>{}(agent.start);
+            std::size_t h2 = std::hash<Node>{}(agent.goal);
+            return h1 ^ (h2 << 1);
+        }
+    };
+
+    std::vector<Edge> to_edges(const Map &map, std::span<const mapf::Pos> path) {
+        assert(!path.empty());
+
+        std::vector<Edge> edges;
+        edges.reserve(path.size());
+
+        for (size_t i = 0; i < path.size(); ++i) {
+            Node n = map.get_n(path[i].col, path[i].row);
+
+            Direction d = Direction::INVALID;
+
+            if (i + 1 < path.size()) {
+                Node next = map.get_n(path[i + 1].col, path[i + 1].row);
+
+                d = map.get_direction(n, next);
+            }
+
+            edges.push_back({n, d});
+        }
+
+        return edges;
+    }
+
+    // Read instance from file
+    SCIP_RETCODE create_instance(
+        SCIP *scip, // SCIP
+        Map &map,
+        std::vector<AgentData> &agents,
+        String instance_name
     ) {
-        // Parse program options.
-        std::string instance_file;
-        Agent agent_limit = -1;
-        SCIP_Real time_limit = 300;
-        SCIP_Longint node_limit = 0;
-        SCIP_Real gap_limit = 0;
-        try {
-                    // Create program options.
-                    cxxopts::Options options(argv[0],
-                                             "BCP-MAPF - branch-and-cut-and-price for multi-agent path finding");
-                    options.positional_help("instance_file").show_positional_help();
-                    options.add_options()
-                            ("help", "Print help")
-                            ("f,file", "Path to instance file", cxxopts::value<String>())
-                            ("a,agent-limit", "Read the first several agents only", cxxopts::value<Agent>())
-                            ("t,time-limit", "Time limit in seconds", cxxopts::value<SCIP_Real>())
-                            ("n,node-limit", "Maximum number of branch-and-bound nodes", cxxopts::value<SCIP_Longint>())
-                            ("g,gap-limit", "Solve to an optimality gap", cxxopts::value<SCIP_Real>());
-                    options.parse_positional({"file"});
+        // Load instance.
+        auto instance = std::make_shared<BcpInstance>(instance_name, map, agents);
 
-                    // Parse options.
-                    auto result = options.parse(argc, argv);
+        // Create the problem.
+        SCIP_CALL(SCIPprobdataCreate(scip, instance_name.c_str(), instance));
 
-                    // Print help.
-                    if (result.count("help") || !result.count("file")) {
-                        println("{}", options.help());
-                        exit(0);
-                    }
+        // Done.
+        return SCIP_OKAY;
+    }
 
-                    // Get path to instance.
-                    if (result.count("file")) {
-                        instance_file = result["file"].as<String>();
-                    }
+    SCIP_RETCODE bcp_start_solver(
+        int timeout_s,
+        const mapf::Grid &grid,
+        const mapf::Agents &agents,
+        std::span<const std::vector<mapf::Path>> group_solutions,
+        mapf::Solution &out
+    ) {
+        // keep credits.
+        std::cerr << "Branch-and-cut-and-price for multi-agent path finding\n";
+        std::cerr << "Edward Lam <ed@ed-lam.com>\n";
+        std::cerr << "Monash University, Melbourne, Australia\n";
 
-                    // Get agent limit.
-                    if (result.count("agent-limit")) {
-                        agent_limit = result["agent-limit"].as<Agent>();
-                    }
-
-                    // Get time limit.
-                    if (result.count("time-limit")) {
-                        time_limit = result["time-limit"].as<SCIP_Real>();
-                    }
-
-                    // Get node limit.
-                    if (result.count("node-limit")) {
-                        node_limit = result["node-limit"].as<SCIP_Longint>();
-                    }
-
-                    // Get optimality gap limit.
-                    if (result.count("gap-limit")) {
-                        gap_limit = result["gap-limit"].as<SCIP_Real>();
-                    }
-                } catch (const cxxopts::exceptions::exception &e) {
-                    err("{}", e.what());
-                }
-
-                // Print.
-                println("Branch-and-cut-and-price for multi-agent path finding");
-                println("Edward Lam <ed@ed-lam.com>");
-                println("Monash University, Melbourne, Australia");
-        #ifdef DEBUG
-                println("Compiled in debug mode");
-        #ifdef USE_WAITEDGE_CONFLICTS
-                println("Using wait-edge conflict constraints");
-        #endif
-        #ifdef USE_RECTANGLE_KNAPSACK_CONFLICTS
-                println("Using rectangle knapsack conflict constraints");
-        #endif
-        #if !defined(USE_WAITCORRIDOR_CONFLICTS) && defined(USE_CORRIDOR_CONFLICTS)
-                println("Using corridor conflict constraints");
-        #endif
-        #ifdef USE_WAITCORRIDOR_CONFLICTS
-                println("Using wait corridor conflict constraints");
-        #endif
-        #ifdef USE_STEPASIDE_CONFLICTS
-                println("Using step aside conflict constraints");
-        #endif
-        #ifdef USE_WAITDELAY_CONFLICTS
-                println("Using wait delay conflict constraints");
-        #endif
-        #ifdef USE_EXITENTRY_CONFLICTS
-                println("Using exit entry conflict constraints");
-        #endif
-        #if !defined(USE_WAITTWOEDGE_CONFLICTS) && defined(USE_TWOEDGE_CONFLICTS)
-                println("Using two edge conflict constraints");
-        #endif
-        #ifdef USE_WAITTWOEDGE_CONFLICTS
-                println("Using wait two edge conflict constraints");
-        #endif
-        #ifdef USE_AGENTWAITEDGE_CONFLICTS
-                println("Using agent wait edge conflict constraints");
-        #endif
-        #ifdef USE_TWOVERTEX_CONFLICTS
-                println("Using two vertex conflict constraints");
-        #endif
-        #ifdef USE_THREEVERTEX_CONFLICTS
-                println("Using three vertex conflict constraints");
-        #endif
-        #ifdef USE_FOUREDGE_CONFLICTS
-                println("Using four edge conflict constraints");
-        #endif
-        #ifdef USE_FIVEEDGE_CONFLICTS
-                println("Using five edge conflict constraints");
-        #endif
-        #ifdef USE_SIXEDGE_CONFLICTS
-                println("Using six edge conflict constraints");
-        #endif
-        #ifdef USE_VERTEX_FOUREDGE_CONFLICTS
-                println("Using vertex four edge conflict constraints");
-        #endif
-        #ifdef USE_GOAL_CONFLICTS
-                println("Using goal conflict constraints");
-        #endif
-        #endif
-                println("");
-
-                // Initialize SCIP.
+        // Initialize SCIP.
         SCIP *scip = nullptr;
         SCIP_CALL(SCIPcreate(&scip));
+
+        scip->set->disp_verblevel = SCIP_VERBLEVEL_NONE;
+        // scip->set->disp_verblevel = SCIP_VERBLEVEL_NORMAL;
 
         // Set up plugins.
         {
@@ -314,31 +266,73 @@ namespace {
             }
         }
 
-        // Read instance.
-        SCIP_CALL(read_instance(scip, instance_file.c_str(), agent_limit));
+        // convert to scip
+        auto bcp_map = Map{static_cast<Position>(grid.width), static_cast<Position>(grid.height), grid.blocked};
+
+        std::vector<AgentData> bcp_agents;
+
+        for (const auto [start, goal]: agents) {
+            bcp_agents.push_back(AgentData{
+                .start = bcp_map.get_n(start.col, start.row),
+                .goal = bcp_map.get_n(goal.col, goal.row)
+            });
+        }
 
         // Set time limit.
-        if (time_limit > 0) {
-            SCIP_CALL(SCIPsetRealParam(scip, "limits/time", time_limit));
+        if (timeout_s > 0) {
+            SCIP_CALL(SCIPsetRealParam(scip, "limits/time", timeout_s));
         }
 
-        // Set node limit.
-        if (node_limit > 0) {
-            SCIP_CALL(SCIPsetLongintParam(scip, "limits/nodes", node_limit));
-        }
+        // create instance.
+        SCIP_CALL(create_instance(scip, bcp_map, bcp_agents, ""));
 
-        // Set optimality gap limit.
-        if (gap_limit > 0) {
-            SCIP_CALL(SCIPsetRealParam(scip, "limits/gap", gap_limit));
+        // seed incumbent solution.
+        if (!group_solutions.empty()) {
+            std::unordered_map<AgentData, Agent, AgentDataHash> agent_lookup;
+
+            for (Agent a = 0; a < static_cast<Agent>(bcp_agents.size()); ++a) {
+                agent_lookup.emplace(bcp_agents[a], a);
+            }
+
+            Vector<Vector<Edge> > seed_paths(bcp_agents.size());
+
+            for (const auto &solution: group_solutions) {
+                for (const auto &path: solution) {
+                    assert(!path.empty());
+
+                    auto edges = to_edges(bcp_map, path);
+                    const auto agent = agent_lookup.at({
+                        edges.front().n,
+                        edges.back().n
+                    });
+
+                    seed_paths[agent] = std::move(edges);
+                }
+            }
+
+            const bool has_complete_seed = std::all_of(
+                seed_paths.begin(),
+                seed_paths.end(),
+                [](const auto &path) {
+                    return !path.empty();
+                }
+            );
+
+            if (has_complete_seed) {
+                SCIP_CALL(SCIPincludeHeurSeededSolution(
+                    scip,
+                    std::move(seed_paths)
+                ));
+            }
         }
 
         SCIP_CALL(SCIPsolve(scip));
 
         {
             // Print.
-            SCIP_CALL(SCIPprintStatistics(scip, nullptr));
+            // SCIP_CALL(SCIPprintStatistics(scip, nullptr));
 
-            write_best_solution(scip, outputVal);
+            get_best_solution(scip, out);
         }
 
         // Free memory.
@@ -349,48 +343,33 @@ namespace {
         return SCIP_OKAY;
     }
 
-    mapf::Solution bcp_returnSol(int argc, char **argv) {
-        mapf::Solution returnSol;
+    mapf::Solution bcp_returnSol(
+        int timeout_s,
+        const mapf::Grid &grid,
+        const mapf::Agents &agents,
+        std::span<const std::vector<mapf::Path>> group_solutions
+    ) {
+        mapf::Solution solution;
 
-        SCIP_RETCODE retcode = bcp_start_solver(argc, argv, returnSol);
+        SCIP_RETCODE retcode = bcp_start_solver(timeout_s, grid, agents, group_solutions, solution);
 
-        // Optional: If you want to check for errors, you can inspect 'retcode' here.
         if (retcode != SCIP_OKAY) {
-            std::cout << "SCIPERROR";
-            std::cerr << "error SCIP";
+            std::cout << "SCIPERROR " << retcode << std::endl;
         }
 
-        return returnSol;
+        return solution;
     }
 }
 
 namespace mapf_solvers::bcp {
-    mapf::Solution bcp_solve(int t, const std::string &input) {
-        // 1. Setup the fake command line arguments
-        std::string programName = "bcp-mapf"; // Dummy program name (equivalent to argv[0])
-        std::string time_limit = "--time-limit=" + std::to_string(t);
+    mapf::Solution bcp_solve(const int timeout_s, const mapf::Grid &grid, const mapf::Agents &agents) {
+        return bcp_returnSol(timeout_s, grid, agents, {});
+    }
+}
 
-        // Create mutable char buffers for the arguments
-        std::vector<char> arg0(programName.begin(), programName.end());
-        arg0.push_back('\0'); // Null-terminate
-
-        std::vector<char> arg1(time_limit.begin(), time_limit.end());
-        arg1.push_back('\0'); // Null-terminate
-
-        std::vector<char> arg2(input.begin(), input.end());
-        arg2.push_back('\0'); // Null-terminate
-
-        // 2. Build the argv array
-        std::vector<char *> argv_vec;
-        argv_vec.push_back(arg0.data()); // argv[0]
-        argv_vec.push_back(arg1.data()); // argv[1]
-        argv_vec.push_back(arg2.data()); // argv[1]
-        argv_vec.push_back(nullptr); // POSIX standard expects argv to be null-terminated
-
-        int argc = 3;
-        char **argv = argv_vec.data();
-
-        // 3. Call your solver
-        return bcp_returnSol(argc, argv);
+namespace mapf_mergers::bcp {
+    mapf::Solution bcp_merge(const int timeout_s, const mapf::Grid &grid, const mapf::Agents &agents,
+                             std::span<const std::vector<mapf::Path>> group_solutions) {
+        return bcp_returnSol(timeout_s, grid, agents, group_solutions);
     }
 }

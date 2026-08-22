@@ -10,6 +10,8 @@
 #include <string>
 #include <iostream>
 
+#include "mapf_common/meta/portfolio.h"
+
 // takes the paths_found_initially and UPDATE all (constrained) paths found for agents from curr to start
 // also, do the same for ll_min_f_vals and paths_costs (since its already "on the way").
 inline void CBS::updatePaths(CBSNode* curr)
@@ -697,38 +699,43 @@ void CBS::savePaths(const string &fileName) const
 
 
 
-mapf::Solution CBS::returnSolution(bool completed) const
-{
-    mapf::Solution returnVal;
-    returnVal.completed = completed;
+mapf::Solution CBS::get_solution() const {
+    mapf::Solution solution;
+	solution.time_ms = static_cast<long>(runtime * 1000.0);
 
-    if (completed) {
-        returnVal.agent_solutions.resize(num_of_agents);
-            for (int i = 0; i < num_of_agents; i++)
-            {
-                if (paths[i] != nullptr)
-                {
-                    mapf::AgentSolution current_agent_path;
-                    current_agent_path.reserve(paths[i]->size());
+    if (solution_found) {
+    	solution.status = to_string(mapf::StandardStatus::Solved);
 
-                    for (const auto& t : *paths[i])
-                    {
-                        mapf::Pos position;
-                        position.row = search_engines[0]->instance.getRowCoordinate(t.location);
-                        position.col = search_engines[0]->instance.getColCoordinate(t.location);
+        solution.agent_solutions.resize(num_of_agents);
+        for (int i = 0; i < num_of_agents; i++) {
+            if (paths[i] != nullptr) {
+                mapf::AgentSolution current_agent_path;
+                current_agent_path.reserve(paths[i]->size());
 
-                        current_agent_path.push_back(position);
-                    }
+                for (const auto& t : *paths[i]) {
+                    mapf::Pos position{
+						.row = search_engines[0]->instance.getRowCoordinate(t.location),
+	                    .col = search_engines[0]->instance.getColCoordinate(t.location)
+                    };
 
-                    returnVal.agent_solutions[i] = current_agent_path;
+                    current_agent_path.push_back(position);
                 }
-                else
-                {
-                    returnVal.agent_solutions[i] = std::nullopt;
-                }
+
+                solution.agent_solutions[i] = current_agent_path;
+            } else {
+                solution.agent_solutions[i] = std::nullopt;
             }
+        }
+    } else {
+	    if (solution_cost == -1)
+		    solution.status = to_string(mapf::StandardStatus::Timeout);
+	    else if (solution_cost == -2)
+		    solution.status = to_string(mapf::StandardStatus::Infeasible);
+	    else
+		    throw std::logic_error("unknown cbs state: " + std::to_string(solution_cost));
     }
-    return returnVal;
+
+    return solution;
 }
 void CBS::printConflicts(const CBSNode &curr)
 {

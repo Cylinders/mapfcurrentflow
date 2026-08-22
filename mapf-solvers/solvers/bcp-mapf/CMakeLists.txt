@@ -55,7 +55,7 @@ set(BCP_MAPF_SOURCE_FILES
         bcp/types/memory_pool.cpp
 )
 
-add_library(bcp-mapf STATIC ${BCP_MAPF_SOURCE_FILES} adapter/bcp_adapter.cpp)
+add_library(bcp-mapf STATIC ${BCP_MAPF_SOURCE_FILES} adapter/bcp_adapter.cpp adapter/heuristics/seeded_solution.cpp)
 
 target_include_directories(bcp-mapf
         PUBLIC
@@ -179,6 +179,7 @@ target_include_directories(bcp-mapf PRIVATE
         fmt/include
         cxxopts/include
         robin-hood-hashing/src/include
+        scipoptsuite-9.2.0/scip/src/scip
         ${Boost_INCLUDE_DIRS}
 )
 
@@ -221,7 +222,7 @@ endif ()
 target_compile_features(bcp-mapf PRIVATE cxx_std_17)
 
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-    target_compile_definitions(bcp-mapf PRIVATE DEBUG _GLIBCXX_DEBUG)
+    target_compile_definitions(bcp-mapf PRIVATE DEBUG)
     message(STATUS "BCP-MAPF compiled in debug mode")
 elseif (CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
     target_compile_definitions(bcp-mapf PRIVATE NDEBUG)

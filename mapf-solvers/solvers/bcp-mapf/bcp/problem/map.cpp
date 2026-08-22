@@ -131,3 +131,8 @@ void Map::print() const
     fmt::print("\n");
     fflush(stdout);
 }
+
+// added for mapf-dallas. not original
+Map::Map(Position width, Position height, Vector<Bool> passable)
+    : passable_(passable), width_(width), height_(height)
+{ }

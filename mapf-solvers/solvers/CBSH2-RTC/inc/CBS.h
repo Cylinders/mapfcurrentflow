@@ -75,7 +75,7 @@ public:
 	void saveCT(const string &fileName) const; // write the CT to a file
     void savePaths(const string &fileName) const; // write the paths to a file
 	std::string writePaths() const;
-	mapf::Solution returnSolution(bool completed) const;
+	mapf::Solution get_solution() const;
 	void clear(); // used for rapid random  restart
 
 private:

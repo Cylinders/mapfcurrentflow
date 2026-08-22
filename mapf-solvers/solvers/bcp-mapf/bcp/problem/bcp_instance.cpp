@@ -109,3 +109,13 @@ BcpInstance::BcpInstance(const FilePath& scenario_path_, const Agent agent_limit
     // Check.
     debug_assert(num_agents == agents.size());
 }
+
+// added for mapf-dallas. not original.
+BcpInstance::BcpInstance(const String& name, const Map map, const Vector<AgentData> agents) :
+    name(std::move(name)),
+    scenario_path{},
+    map_path{},
+    map(std::move(map)),
+    num_agents(static_cast<Agent>(agents.size())),
+    agents(std::move(agents))
+{ }
