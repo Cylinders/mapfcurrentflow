@@ -1,1 +1,0 @@
- -DGMP=off -DPAPILO=off -DZIMPL=off -DIPOPT=off -DSANITIZE_UNDEFINED=on -DSOPLEX_DIR=/home/ogvruth/zhouResearchSP26/pickyrobots/mapf-benchmark/build-release/soplex -DSYM=snauty
