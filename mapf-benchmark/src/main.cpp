@@ -18,8 +18,7 @@
 #include "solver.h"
 
 namespace {
-const std::filesystem::path root = "../../mapf-benchmark";
-const std::filesystem::path output = root / "output";
+const std::filesystem::path benchmark_root = MAPF_BENCHMARK_SOURCE_DIR;
 
 enum class BenchmarkLevel {
   level0 = 0,
@@ -29,7 +28,9 @@ struct BenchmarkOptions {
   BenchmarkLevel level = BenchmarkLevel::level0;
   int timeout_seconds = 600;
   std::size_t memory_limit_mb = 8 * 1024;
-  std::filesystem::path manifest_path = root / "data/problems/manifest.jsonl";
+  std::filesystem::path manifest_path =
+      benchmark_root / "data/problems/manifest.jsonl";
+  std::filesystem::path output_path = benchmark_root / "output";
 };
 
 template <typename Integer>
@@ -82,6 +83,8 @@ BenchmarkOptions parse_options(int argc, char **argv) {
           require_value(argument), argument);
     } else if (argument == "--manifest") {
       options.manifest_path = require_value(argument);
+    } else if (argument == "--output") {
+      options.output_path = require_value(argument);
     } else if (!argument.starts_with('-') && !positional_level_seen) {
       options.level = parse_level(argument);
       positional_level_seen = true;
@@ -252,7 +255,7 @@ void run_problem(mapf::solvers::SolverPool &solver_pool,
 void run(const BenchmarkOptions &options,
          const std::vector<ManifestProblem> &problems,
          mapf::solvers::SolverPool &solver_pool) {
-  const std::filesystem::path level_output = output / "level0";
+  const std::filesystem::path level_output = options.output_path / "level0";
   const std::filesystem::path solution_output = level_output / "solutions";
   const std::filesystem::path csv_path = level_output / "metadata.csv";
 

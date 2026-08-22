@@ -14,6 +14,7 @@ add_dependencies(mapf-benchmark
 )
 
 target_compile_definitions(mapf-benchmark PRIVATE
+        MAPF_BENCHMARK_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
         MAPF_CBSH_WORKER_PATH="$<TARGET_FILE:mapf-solver-worker-cbsh>"
         MAPF_BCP_WORKER_PATH="$<TARGET_FILE:mapf-solver-worker-bcp>"
 )
