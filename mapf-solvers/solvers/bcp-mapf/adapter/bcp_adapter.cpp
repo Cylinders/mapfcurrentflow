@@ -38,12 +38,12 @@ namespace {
         edges.reserve(path.size());
 
         for (size_t i = 0; i < path.size(); ++i) {
-            Node n = map.get_n(path[i].col, path[i].row);
+            Node n = map.get_n(path[i].col + 1, path[i].row + 1);
 
             Direction d = Direction::INVALID;
 
             if (i + 1 < path.size()) {
-                Node next = map.get_n(path[i + 1].col, path[i + 1].row);
+                Node next = map.get_n(path[i + 1].col + 1, path[i + 1].row + 1);
 
                 d = map.get_direction(n, next);
             }
@@ -266,15 +266,14 @@ namespace {
             }
         }
 
-        // convert to scip
         auto bcp_map = Map{static_cast<Position>(grid.width), static_cast<Position>(grid.height), grid.blocked};
 
         std::vector<AgentData> bcp_agents;
 
         for (const auto [start, goal]: agents) {
             bcp_agents.push_back(AgentData{
-                .start = bcp_map.get_n(start.col, start.row),
-                .goal = bcp_map.get_n(goal.col, goal.row)
+                .start = bcp_map.get_n(start.col + 1, start.row + 1),
+                .goal = bcp_map.get_n(goal.col + 1, goal.row + 1)
             });
         }
 

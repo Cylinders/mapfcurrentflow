@@ -132,7 +132,24 @@ void Map::print() const
     fflush(stdout);
 }
 
-// added for mapf-dallas. not original
-Map::Map(Position width, Position height, Vector<Bool> passable)
-    : passable_(passable), width_(width), height_(height)
-{ }
+Map::Map(const Position width, const Position height, const Vector<Bool>& blocked)
+{
+    release_assert(width > 0, "Invalid map width {}", width);
+    release_assert(height > 0, "Invalid map height {}", height);
+    release_assert(blocked.size() == static_cast<Size>(width * height),
+                   "Expected {} map cells but received {}",
+                   width * height,
+                   blocked.size());
+
+    resize(width + 2, height + 2);
+    for (Position y = 0; y < height; ++y)
+    {
+        for (Position x = 0; x < width; ++x)
+        {
+            if (!blocked[y * width + x])
+            {
+                set_passable(get_n(x + 1, y + 1));
+            }
+        }
+    }
+}

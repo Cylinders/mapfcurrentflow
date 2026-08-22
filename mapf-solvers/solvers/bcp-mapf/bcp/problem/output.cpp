@@ -49,8 +49,8 @@ namespace {
         for (Time t = 0; t < path_length; ++t) {
             const Node n = path[t].n;
 
-            const auto row = map.get_y(n);
-            const auto col = map.get_x(n);
+            const auto row = map.get_y(n) - 1;
+            const auto col = map.get_x(n) - 1;
 
             result.push_back({
                 static_cast<int>(row),

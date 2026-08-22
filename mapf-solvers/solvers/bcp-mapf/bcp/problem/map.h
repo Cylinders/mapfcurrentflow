@@ -24,8 +24,7 @@ class Map
     // Custom constructor
     Map(const FilePath& map_path);
 
-    // added for mapf-dallas. not original
-    Map(Position width, Position height, Vector<Bool> passable);
+    Map(Position width, Position height, const Vector<Bool>& blocked);
 
     // Getters
     inline Node size() const
